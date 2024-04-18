@@ -1,7 +1,9 @@
 from gtts import gTTS
 import os
 import speech_recognition as sr
-import openai
+from openai import OpenAI
+
+
 
 # Here are the available engine strings for GPT-3.5 that you can use:
 # text-davinci-002: This is the most capable version of the GPT-3.5 model. It offers the highest
@@ -21,18 +23,16 @@ def query_gpt3_5(prompt):
     if not api_key:
         return "API key not found."
 
+    client = OpenAI(api_key=api_key)
     # Configure the library with your API key
-    openai.api_key = api_key
 
     try:
         # Make an API call to the GPT-3.5 model using the new API interface
-        response = openai.ChatCompletion.create(
-            model="text-davinci-002",  # Use this string for GPT-3.5 Davinci
-            messages=[{"role": "system", "content": "You are a helpful assistant."},
-                      {"role": "user", "content": prompt}]
-        )
+        response = client.chat.completions.create(model="gpt-3.5-turbo",  # Use this string for GPT-3.5
+        messages=[{"role": "system", "content": "You are a helpful assistant, who makes very brief responses."},
+                  {"role": "user", "content": prompt}])
         # Extract the text from the response
-        response_text = response['choices'][0]['message']['content']
+        response_text = response.choices[0].message.content
         return response_text
     except Exception as e:
         return str(e)
@@ -63,6 +63,7 @@ def listen():
 def listen_and_recognize():
     # Initialize the recognizer
     r = sr.Recognizer()
+    gpt_response = None
 
     # Define the microphone (uses default system microphone)
     with sr.Microphone() as source:
@@ -80,15 +81,21 @@ def listen_and_recognize():
 
                 # Use Google Web Speech API to recognize audio
                 recognized_text = r.recognize_google(audio)
+                if recognized_text == gpt_response:
+                    recognized_text = None
                 print(recognized_text)
                 if recognized_text == "exit program":
                     speak("exiting program")
                     return
 
                 else:
-                    gpt_response = query_gpt3_5(recognized_text)
-                    print("GPT-3 response: " + gpt_response)
-                    speak(gpt_response)
+                    #response = input('would you like to send this text to gpt3.5? Y/n').lower()
+                    if recognized_text != None:
+                        gpt_response = query_gpt3_5(recognized_text)
+                        recognized_text = '' #clear last voice input
+                        print("GPT-3 response: " + gpt_response)
+                        speak(gpt_response)
+
 
                 # Here you could check the recognized text and perform actions or break the loop
 
