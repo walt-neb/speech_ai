@@ -1,0 +1,7 @@
+#pip install pyttsx3
+
+sudo apt-get install mpg321
+sudo apt-get install portaudio19-dev
+pip install pyaudio
+pip install SpeechRecognition
+pip install openai
