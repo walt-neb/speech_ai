@@ -1,8 +1,10 @@
+
+import asyncio
 from gtts import gTTS
 import os
 import speech_recognition as sr
 from openai import OpenAI
-
+from datetime import datetime
 
 
 # Here are the available engine strings for GPT-3.5 that you can use:
@@ -15,6 +17,22 @@ from openai import OpenAI
 # straightforward tasks that require less nuance.
 # text-ada-001: This is the fastest and least expensive version of GPT-3.5, best used for tasks
 # that can tolerate lower-quality completions or where speed is more critical than depth.
+
+# Reset
+Color_Off="\033[0m"       # Text Reset
+# Regular Colors
+Black="\033[0;30m"        # Black
+Red="\033[0;31m"          # Red
+Green="\033[0;32m"        # Green
+Yellow="\033[0;33m"       # Yellow
+Blue="\033[0;34m"         # Blue
+Purple="\033[0;35m"       # Purple
+Cyan="\033[0;36m"         # Cyan
+White="\033[0;37m"        # White
+
+def cprint(text, color):
+    current_time = datetime.now().strftime("%H:%M:%S")
+    print(f"\033[0;37m{current_time} {color}{text}\033[0m")
 
 
 def query_gpt3_5(prompt):
@@ -29,7 +47,7 @@ def query_gpt3_5(prompt):
     try:
         # Make an API call to the GPT-3.5 model using the new API interface
         response = client.chat.completions.create(model="gpt-3.5-turbo",  # Use this string for GPT-3.5
-        messages=[{"role": "system", "content": "You are a helpful assistant, who makes very brief responses."},
+        messages=[{"role": "system", "content": "You are an audio enabled assistant, who provides brief responses."},
                   {"role": "user", "content": prompt}])
         # Extract the text from the response
         response_text = response.choices[0].message.content
@@ -40,24 +58,8 @@ def query_gpt3_5(prompt):
 def speak(text):
     tts = gTTS(text=text, lang='en')  # Initialize the gTTS with text
     tts.save("temp.mp3")  # Save the speech audio into a file
-    os.system("mpg321 temp.mp3")  # Play the converted audio
+    os.system("mpg321 temp.mp3 >/dev/null 2>&1")  # Play the converted audio and suppress output
 
-def listen():
-    # Initialize recognizer class (for recognizing the speech)
-    r = sr.Recognizer()
-
-    # Listening to the microphone and capture the audio
-    with sr.Microphone() as source:
-        print("Your turn to talk")
-        audio_text = r.listen(source)
-        print("Time over, thanks")
-        try:
-            # using google speech recognition
-            recognized_audio_string = r.recognize_google(audio_text)
-            speak("I heard, " + recognized_audio_string)
-        except:
-             speak("Sorry, I did not get that")
-    return audio_text
 
 
 def listen_and_recognize():
@@ -69,22 +71,25 @@ def listen_and_recognize():
     with sr.Microphone() as source:
         # Calibrate the microphone to ambient noise
         print("Calibrating microphone...")
-        r.adjust_for_ambient_noise(source, duration=1)
+        r.adjust_for_ambient_noise(source, duration=2)
 
+        intoduction_text = "Hello, I'm an audio enabled AI, at your service."
+        print(intoduction_text)
+        speak(intoduction_text)
         # Start the listening loop
         print("Listening...")
         while True:
             try:
+                recognized_text = None
                 # Listen for the first phrase and extract it into audio data
                 audio = r.listen(source)
-                print("Recognizing...")
-
-                # Use Google Web Speech API to recognize audio
-                recognized_text = r.recognize_google(audio)
-                if recognized_text == gpt_response:
-                    recognized_text = None
-                print(recognized_text)
+                cprint("Recognizing...", Red)
+                recognized_text = r.recognize_google(audio) # Use Google Web Speech API to recognize audio
+                cprint('Recognized text:'+ recognized_text, Red)
+                cprint('User Input: ' + recognized_text, Blue)
+                # check the recognized text and perform actions or break the loop
                 if recognized_text == "exit program":
+                    cprint("exiting program...", Red)
                     speak("exiting program")
                     return
 
@@ -93,11 +98,9 @@ def listen_and_recognize():
                     if recognized_text != None:
                         gpt_response = query_gpt3_5(recognized_text)
                         recognized_text = '' #clear last voice input
-                        print("GPT-3 response: " + gpt_response)
+                        cprint("GPT-3 response: " + gpt_response, Purple)
                         speak(gpt_response)
 
-
-                # Here you could check the recognized text and perform actions or break the loop
 
             except sr.UnknownValueError:
                 # Google Web Speech API could not understand audio
@@ -110,11 +113,3 @@ def listen_and_recognize():
 if __name__ == '__main__':
     listen_and_recognize()
 
-    # speak("Hello, I'm an audio enabled AI, how can I help you today?")
-    # user_speach = listen()
-    #
-    # example_prompt = "What are some key advantages of Python over other programming languages?"
-    #
-    # gpt_response_string = query_gpt3_5(user_speach)
-    # print("Response from GPT-3.5:", gpt_response_string)
-    # speak(gpt_response_string)
