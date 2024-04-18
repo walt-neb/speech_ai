@@ -7,8 +7,10 @@ from datetime import datetime
 from io import BytesIO
 import sounddevice as sd
 from vosk import Model, KaldiRecognizer
-from pygame import mixer  # pygame library for playing audio from memory
+#from pygame import mixer  # pygame library for playing audio from memory
 import time as tm
+from pydub import AudioSegment
+from pydub.playback import play
 
 
 # Here are the available engine strings for GPT-3.5 that you can use:
@@ -35,10 +37,11 @@ Cyan="\033[0;36m"         # Cyan
 White="\033[0;37m"        # White
 
 # Initialize the mixer module
-mixer.init()
+#mixer.init()
 last_speech_output_time = 0
 recent_responses = []
 recognizer = None
+continue_interactions = True  # Global flag to control the main loop
 
 
 def cprint(text, color_code):
@@ -52,13 +55,23 @@ def speak(text):
     buf = BytesIO()
     tts.write_to_fp(buf)
     buf.seek(0)
+
+    # Load generated speech into pydub
+    sound = AudioSegment.from_file(buf, format="mp3")
+    # Change speed
+    new_frame_rate = int(sound.frame_rate * 1.1)
+    resampled_sound = sound._spawn(sound.raw_data, overrides={
+                                "frame_rate": new_frame_rate})
+    resampled_sound = resampled_sound.set_frame_rate(44100)
+    # Play the audio
+    play(resampled_sound)
+
+    # Update the time after speaking
+    last_speech_output_time = tm.time()
+
     if input_stream.active:
         input_stream.stop()  # Stop the input stream while speaking
-    mixer.music.load(buf)
-    mixer.music.play()
 
-    while mixer.music.get_busy():  # Wait for audio to finish playing
-        pass
     if not input_stream.active:
         input_stream.start()  # Restart the input stream after playback
 
@@ -77,8 +90,11 @@ def query_gpt3_5(prompt):
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "You are an audio enabled assistant, who provides brief responses."},
-                      {"role": "user", "content": prompt}]
+            messages=[{"role": "system", "content":
+                "You are an audio enabled AI assistant, who provides short conversational responses. "
+                "You also will also happily talk about current events, sports, and weather. "
+                "If the user asks for detailed infrmation on something, provide a response in 2-3 sentenses."},
+                {"role": "user", "content": prompt}]
         )
         response_text = response.choices[0].message.content
         recent_responses.append(response_text)
@@ -96,6 +112,7 @@ def handle_gpt_response(response_text):
     speak(response_text)
 
 def recognize_and_interact():
+    global continue_interactions
     global recognizer
     model_path = "/home/walt/src/speach/vosk/vosk-model-en-us-0.22"  # Path to the Vosk model
     if not os.path.isdir(model_path):
@@ -107,11 +124,12 @@ def recognize_and_interact():
 
     with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16', channels=1, callback=my_callback):
         cprint("Please speak now (press Ctrl+C to stop recording)...", "32")  # Green text for system messages
-        while True:
-            pass  # Keep the stream alive
+        while continue_interactions:
+            pass  # Keep the stream alive until "exit program" is heard
 
 def my_callback(indata, frames, time, status):
     global last_speech_output_time
+    global continue_interactions
     if status:
         cprint(f"Status error: {status}", "31")
     if tm.time() - last_speech_output_time < 2.5:  # Check for time delay
@@ -122,14 +140,15 @@ def my_callback(indata, frames, time, status):
         if result and 'text' in result and result['text']:
             recognized_text = result['text'].strip()
             if recognized_text == "exit program":
-                clean_up()
-                sys.exit("Program terminated")
+                cprint("Exiting program...", "31")
+                continue_interactions = False  # Set flag to False instead of exiting
+                print(f'continue_interactions: {continue_interactions}')
             if recognized_text in recent_responses:
                 cprint("Skipping recognized text as it matches a recent response.", "33")  # Yellow for notices
                 return
             cprint("User: " + recognized_text, "34")  # Blue text
-            query_gpt3_5(recognized_text)
-
+            if continue_interactions:
+                query_gpt3_5(recognized_text)
 
 
 input_stream = sd.InputStream(samplerate=16000, channels=1, callback=my_callback)
@@ -142,3 +161,5 @@ def clean_up():
 
 if __name__ == "__main__":
     recognize_and_interact()
+    clean_up()  # Ensure proper cleanup
+    sys.exit("Program terminated...")
