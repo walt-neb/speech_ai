@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 from gtts import gTTS
 from openai import OpenAI
@@ -36,9 +37,12 @@ White="\033[0;37m"        # White
 # Initialize the mixer module
 mixer.init()
 last_speech_output_time = 0
+recent_responses = []
+recognizer = None
+
 
 def cprint(text, color_code):
-    current_time = datetime.now().strftime("%H:%M:%S")
+    current_time = datetime.now().strftime("%H:%M:%S.%f")[:-5]
     print(f"\033[{color_code}m{current_time}: {text}\033[0m")
 
 def speak(text):
@@ -48,15 +52,20 @@ def speak(text):
     buf = BytesIO()
     tts.write_to_fp(buf)
     buf.seek(0)
+    if input_stream.active:
+        input_stream.stop()  # Stop the input stream while speaking
     mixer.music.load(buf)
     mixer.music.play()
 
     while mixer.music.get_busy():  # Wait for audio to finish playing
         pass
+    if not input_stream.active:
+        input_stream.start()  # Restart the input stream after playback
+
     last_speech_output_time = tm.time()  # Update the time after speaking
 
 
-recent_responses = []
+
 def query_gpt3_5(prompt):
     """ Query GPT-3.5 and handle the response asynchronously. """
     api_key = os.getenv("OPENAI_API_KEY")
@@ -86,8 +95,8 @@ def handle_gpt_response(response_text):
     cprint("GPT-3 response: " + response_text, "35")  # Purple text
     speak(response_text)
 
-
 def recognize_and_interact():
+    global recognizer
     model_path = "/home/walt/src/speach/vosk/vosk-model-en-us-0.22"  # Path to the Vosk model
     if not os.path.isdir(model_path):
         cprint(f"Model directory does not exist: {model_path}", "31")
@@ -96,27 +105,40 @@ def recognize_and_interact():
     model = Model(model_path)
     recognizer = KaldiRecognizer(model, 16000)
 
-    def callback(indata, frames, time, status):
-        global last_speech_output_time
-        if status:
-            cprint(f"Status error: {status}", "31")
-        if tm.time() - last_speech_output_time < 2.5:  # Check for time delay
-            return  # Ignore this input
-
-        if recognizer.AcceptWaveform(bytes(indata)):
-            result = json.loads(recognizer.Result())
-            if result and 'text' in result and result['text']:
-                recognized_text = result['text'].strip()
-                if recognized_text in recent_responses:
-                    cprint("Skipping recognized text as it matches a recent response.", "33")  # Yellow for notices
-                    return
-                cprint("User: " + recognized_text, "34")  # Blue text
-                query_gpt3_5(recognized_text)
-
-    with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16', channels=1, callback=callback):
+    with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16', channels=1, callback=my_callback):
         cprint("Please speak now (press Ctrl+C to stop recording)...", "32")  # Green text for system messages
         while True:
             pass  # Keep the stream alive
+
+def my_callback(indata, frames, time, status):
+    global last_speech_output_time
+    if status:
+        cprint(f"Status error: {status}", "31")
+    if tm.time() - last_speech_output_time < 2.5:  # Check for time delay
+        return  # Ignore this input
+
+    if recognizer.AcceptWaveform(bytes(indata)):
+        result = json.loads(recognizer.Result())
+        if result and 'text' in result and result['text']:
+            recognized_text = result['text'].strip()
+            if recognized_text == "exit program":
+                clean_up()
+                sys.exit("Program terminated")
+            if recognized_text in recent_responses:
+                cprint("Skipping recognized text as it matches a recent response.", "33")  # Yellow for notices
+                return
+            cprint("User: " + recognized_text, "34")  # Blue text
+            query_gpt3_5(recognized_text)
+
+
+
+input_stream = sd.InputStream(samplerate=16000, channels=1, callback=my_callback)
+input_stream.start()
+
+def clean_up():
+    if input_stream.active:
+        input_stream.stop()
+    input_stream.close()
 
 if __name__ == "__main__":
     recognize_and_interact()
