@@ -1,0 +1,22 @@
+# Here are the available engine strings for GPT-3.5 that you can use:
+# text-davinci-002: This is the most capable version of the GPT-3.5 model. It offers the highest
+# quality completions and is best suited for applications requiring a deep understanding of
+# context or generating creative content.
+# text-curie-001: This engine offers a good balance between cost and capability, suitable for
+# tasks requiring understanding but not as depth-heavy as those best for Davinci.
+# text-babbage-001: This model is faster and less expensive than Davinci and Curie, suitable for
+# straightforward tasks that require less nuance.
+# text-ada-001: This is the fastest and least expensive version of GPT-3.5, best used for tasks
+# that can tolerate lower-quality completions or where speed is more critical than depth.
+
+# Reset
+Color_Off="\033[0m"       # Text Reset
+# Regular Colors
+Black="\033[0;30m"        # Black
+Red="\033[0;31m"          # Red
+Green="\033[0;32m"        # Green
+Yellow="\033[0;33m"       # Yellow
+Blue="\033[0;34m"         # Blue
+Purple="\033[0;35m"       # Purple
+Cyan="\033[0;36m"         # Cyan
+White="\033[0;37m"        # White
